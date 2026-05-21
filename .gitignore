@@ -1,0 +1,105 @@
+# ========== Java Build Artifacts ==========
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+out/
+
+# ========== IDE & Editor ==========
+.idea/
+.vscode/
+*.iml
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+*.swp
+*.swo
+*~
+
+# ========== Maven ==========
+.m2/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+
+# ========== Gradle ==========
+.gradle/
+build/
+*.gradle.kts.bak
+
+# ========== Logs & Output ==========
+*.log
+logs/
+*.out
+output/
+results/
+
+# ========== Runtime Files ==========
+*.pid
+*.sock
+
+# ========== Temporary & Cache Files ==========
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+*.orig
+
+# ========== OS Specific Files ==========
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ========== Node & NPM (if used) ==========
+node_modules/
+npm-debug.log
+package-lock.json
+
+# ========== Database Files ==========
+*.db
+*.sqlite
+*.sqlite3
+
+# ========== Python (if used) ==========
+__pycache__/
+*.py[cod]
+*$py.class
+env/
+venv/
+
+# ========== Local Configuration ==========
+*.local.properties
+.env
+.env.local
+
+# ========== Documentation Folder ==========
+# Ignore entire doc/ folder - keep only if needed locally
+doc/
+doc/**
+
+# ========== KEEP: Important Project Files ==========
+# Source code
+!src/
+!src/**
+
+# Main README only (not sub-docs in doc/ folder)
+!README.md
+!.gitignore
+
+# Build & Config
+!pom.xml
+!nodes.config
