@@ -116,7 +116,7 @@ UDP: 6000-6002  (heartbeat liveness probes, = TCP_port + 1000)
 
 ```bash
 # 1. Clone repo
-git clone https://github.com/YOUR-USERNAME/TokenRing.git
+git clone https://github.com/####/TokenRing.git
 cd TokenRing
 
 # 2. Verify Java
@@ -876,7 +876,7 @@ A: Yes, use DATA messages in Message.payload field.
 
 ```bash
 # 1. Fork & clone
-git clone https://github.com/YOUR-USERNAME/TokenRing.git
+git clone https://github.com/####/TokenRing.git
 cd TokenRing
 
 # 2. Create feature branch
