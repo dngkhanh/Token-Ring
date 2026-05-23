@@ -31,12 +31,27 @@ public class Main {
 
         int myId = id.charAt(0); // A=65, B=66...
 
+        long holdDelay = 500; // default
+        for (int i = 2; i < args.length - 1; i++) {
+            if (args[i].equals("--delay")) {
+                try {
+                    holdDelay = Long.parseLong(args[i + 1]);
+                    System.out.println("[Config] Token hold delay: " + holdDelay + "ms");
+                } catch (NumberFormatException e) {
+                    System.err.println("Invalid --delay value, using default 500ms");
+                }
+            }
+        }
+
         Node node = new Node(id, myId, self, ring);
+        node.holdDelay = holdDelay;
         node.start();
 
         if (id.equals("A")) {
             Thread.sleep(2000);
             node.onReceiveToken();
+        } else {
+            node.lastTokenTime = System.currentTimeMillis();
         }
     }
 

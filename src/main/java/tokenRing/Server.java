@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 
 class Server extends Thread {
@@ -14,16 +15,19 @@ class Server extends Thread {
     }
 
     public void run() {
-        try (ServerSocket serverSocket = new ServerSocket(node.self.port)) {
+        try (ServerSocket serverSocket = new ServerSocket()) {
+            serverSocket.setReuseAddress(true);
+            serverSocket.bind(new InetSocketAddress(node.self.port));
             System.out.println("Node " + node.id + " listening on port " + node.self.port);
 
             while (true) {
                 Socket socket = serverSocket.accept();
-                socket.setSoTimeout(5000); // 5 second timeout
+                socket.setSoTimeout(5000);
                 new Thread(() -> handle(socket)).start();
             }
 
         } catch (Exception e) {
+            System.err.println("[ERROR] Node " + node.id + " TCP Server failed: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -44,9 +48,8 @@ class Server extends Thread {
 
             switch (m.type) {
                 case "TOKEN" -> {
-                    // When receiving TOKEN, send TOKEN_ACK back
                     sendTokenAck(m.from);
-                    node.onReceiveToken();
+                    new Thread(node::onReceiveToken).start();
                 }
                 case "DATA" -> node.handleData(m);
                 case "ELECTION" -> node.handleElection(m);
@@ -54,8 +57,7 @@ class Server extends Thread {
                 case "LEAVE" -> node.handleLeave(m);
                 case "UPDATE_RING" -> node.handleUpdatering(m);
                 case "TOKEN_ACK" -> {
-                    // Check if this ACK is for our sent token
-                    if (m.from.equals(node.tokenSentTo)) {
+                    if (m.from.equals(node.tokenSentTo.get())) {
                         node.tokenAckReceived = true;
                         System.out.println(node.id + " got TOKEN_ACK from " + m.from);
                     }
@@ -71,29 +73,22 @@ class Server extends Thread {
     }
 
     void sendTokenAck(String fromNodeId) {
-        try {
-            NodeInfo sender = node.ring.stream()
-                    .filter(n -> n.id.equals(fromNodeId))
-                    .findFirst()
-                    .orElse(null);
-            
-            if (sender != null) {
-                Message ack = new Message();
-                ack.type = "TOKEN_ACK";
-                ack.from = node.id;
-                ack.timestamp = System.currentTimeMillis();
-                
-                new Thread(() -> {
-                    try {
-                        Client.send(sender, ack);
-                        System.out.println(node.id + " sent TOKEN_ACK to " + sender.id);
-                    } catch (Exception e) {
-                        System.err.println("Error sending TOKEN_ACK: " + e.getMessage());
-                    }
-                }).start();
+        NodeInfo sender = node.ring.stream()
+                .filter(n -> n.id.equals(fromNodeId))
+                .findFirst()
+                .orElse(null);
+
+        if (sender != null) {
+            Message ack = new Message();
+            ack.type = "TOKEN_ACK";
+            ack.from = node.id;
+            ack.timestamp = System.currentTimeMillis();
+            try {
+                Client.send(sender, ack);
+                System.out.println(node.id + " sent TOKEN_ACK to " + sender.id);
+            } catch (Exception e) {
+                System.err.println("Error sending TOKEN_ACK: " + e.getMessage());
             }
-        } catch (Exception e) {
-            System.err.println("Error in sendTokenAck: " + e.getMessage());
         }
     }
 }
