@@ -2,15 +2,11 @@ package tokenRing;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 class Node {
     String id;
@@ -23,10 +19,8 @@ class Node {
     volatile long lastTokenTime = 0;
     volatile boolean electionInProgress = false;
     volatile long tokenSentTime = 0;
-    AtomicReference<String> tokenSentTo = new AtomicReference<>(null); // Fix #8
+    volatile String tokenSentTo = null;
     volatile boolean tokenAckReceived = false;
-    AtomicBoolean isSendingToken = new AtomicBoolean(false); // Fix #3
-    long holdDelay = 500; // ms to hold token before forwarding (configurable)
 
     Map<String, Long> lastSeen = new ConcurrentHashMap<>();
 
@@ -48,17 +42,12 @@ class Node {
 
     // ================= TOKEN =================
     void onReceiveToken() {
-        // Drop duplicate token: if already sending, we're mid-forward from a previous token
-        if (isSendingToken.get()) {
-            System.out.println(id + " ⚠️  duplicate TOKEN received while sending - dropping");
-            return;
-        }
-
         hasToken = true;
         lastTokenTime = System.currentTimeMillis();
+
         System.out.println(id + " got TOKEN");
 
-        // Check quorum before using token
+        // Check if we still have quorum before using token
         if (!hasQuorum()) {
             System.out.println(id + " ⚠️  NO QUORUM while holding token - forwarding immediately");
             forwardToken();
@@ -66,8 +55,8 @@ class Node {
         }
 
         if (Math.random() < 0.6) {
-            System.out.println(id + " using resource... (hold " + holdDelay + "ms)");
-            try { Thread.sleep(holdDelay); } catch (Exception e) {}
+            System.out.println(id + " using resource...");
+            try { Thread.sleep(1000); } catch (Exception e) {}
         }
 
         sendDataIfNeeded();
@@ -77,10 +66,10 @@ class Node {
     void forwardToken() {
         NodeInfo next = findNextAlive();
 
-        // If don't have node alive, keep token and wait
+        // Nếu không còn ai khác alive, giữ token và đợi
         if (next == null || next.id.equals(id)) {
             System.out.println(id + " no other alive node, keeping token");
-            return;
+            return; 
         }
 
         Message token = new Message();
@@ -88,7 +77,7 @@ class Node {
         token.from = id;
         token.timestamp = System.currentTimeMillis();
 
-            sendWithAckTimeout(next, token, 3000);
+        sendWithAckTimeout(next, token, 3000); // 3 second timeout for token ACK
         hasToken = false;
     }
 
@@ -181,7 +170,15 @@ class Node {
         return result;
     }
 
-    // ================= SEND =================
+    // ================= ACK =================
+    void sendWithAck(NodeInfo node, Message msg) {
+        try {
+            Client.send(node, msg);
+        } catch (Exception e) {
+            System.out.println("Node " + node.id + " unreachable → skipping");
+        }
+    }
+
     void send(NodeInfo node, Message msg) {
         try {
             Client.send(node, msg);
@@ -189,78 +186,51 @@ class Node {
             System.out.println("Send fail to " + node.id);
         }
     }
-    boolean sendWithAckTimeout(NodeInfo startNode, Message msg, long timeoutMs) {
-        if (!isSendingToken.compareAndSet(false, true)) {
-            System.out.println(id + " already sending token, ignoring duplicate call");
-            return false;
-        }
-
+    void sendWithAckTimeout(NodeInfo node, Message msg, long timeoutMs) {
         new Thread(() -> {
             try {
-                Set<String> tried = new HashSet<>();
-                NodeInfo currentTarget = startNode;
+                // Mark that we're sending token to this node and waiting for ACK
+                tokenSentTo = node.id;
+                tokenAckReceived = false;
+                long startTime = System.currentTimeMillis();
 
-                while (currentTarget != null && !currentTarget.id.equals(id)) {
-                    if (tried.contains(currentTarget.id)) {
-                        System.out.println(id + " all reachable nodes tried, keeping token");
-                        hasToken = true;
-                        return;
+                // Send token message
+                Client.send(node, msg);
+                System.out.println(id + " sent " + msg.type + " to " + node.id + ", waiting for TOKEN_ACK");
+                tokenSentTime = System.currentTimeMillis();
+
+                // Wait for TOKEN_ACK within timeout
+                while (System.currentTimeMillis() - startTime < timeoutMs) {
+                    if (tokenAckReceived) {
+                        System.out.println(id + " received TOKEN_ACK from " + node.id);
+                        return; // Success - token delivered
                     }
-                    tried.add(currentTarget.id);
-
-                    tokenSentTo.set(currentTarget.id);
-                    tokenAckReceived = false;
-                    long startTime = System.currentTimeMillis();
-
-                    boolean sent = false;
-                    try {
-                        Client.send(currentTarget, msg);
-                        System.out.println(id + " sent " + msg.type + " to " + currentTarget.id + ", waiting for TOKEN_ACK");
-                        tokenSentTime = System.currentTimeMillis();
-                        sent = true;
-                    } catch (Exception e) {
-                        System.out.println(id + " send error to " + currentTarget.id + ": " + e.getMessage());
-                    }
-
-                    if (sent) {
-                        while (System.currentTimeMillis() - startTime < timeoutMs) {
-                            if (tokenAckReceived) {
-                                System.out.println(id + " received TOKEN_ACK from " + currentTarget.id);
-                                return; // Success
-                            }
-                            try { Thread.sleep(50); } catch (InterruptedException e) { break; }
-                        }
-                        System.out.println(id + " TOKEN_ACK timeout from " + currentTarget.id + ", trying next node");
-                    }
-
-                    currentTarget = findNextAliveExcluding(tried);
+                    Thread.sleep(50); // Check every 50ms
                 }
 
-                System.out.println(id + " no alive node to forward token, keeping token");
-                hasToken = true;
-            } finally {
-                isSendingToken.set(false);
+                // Timeout - token not acknowledged
+                System.out.println(id + " TOKEN_ACK timeout from " + node.id + ", trying next node");
+                NodeInfo nextNode = findNextAlive();
+                if (nextNode != null && !nextNode.id.equals(id) && !nextNode.id.equals(node.id)) {
+                    sendWithAckTimeout(nextNode, msg, timeoutMs);
+                } else {
+                    System.out.println(id + " no other alive node, keeping token");
+                    hasToken = true;
+                }
+
+            } catch (Exception e) {
+                System.out.println(id + " error sending " + msg.type + " to " + node.id + ": " + e.getMessage());
+                // Try next alive node
+                NodeInfo nextNode = findNextAlive();
+                if (nextNode != null && !nextNode.id.equals(id)) {
+                    sendWithAckTimeout(nextNode, msg, timeoutMs);
+                } else {
+                    System.out.println(id + " no other alive node, keeping token");
+                    hasToken = true;
+                }
             }
         }).start();
-        return true; // Thread started successfully
     }
-
-    NodeInfo findNextAliveExcluding(Set<String> excluded) {
-        List<NodeInfo> sorted = ring.stream()
-                .sorted(Comparator.comparing(n -> n.id))
-                .toList();
-        boolean foundSelf = false;
-        for (NodeInfo n : sorted) {
-            if (n.id.equals(id)) { foundSelf = true; continue; }
-            if (foundSelf && isAlive(n) && !excluded.contains(n.id)) return n;
-        }
-        for (NodeInfo n : sorted) {
-            if (n.id.equals(id)) break;
-            if (isAlive(n) && !excluded.contains(n.id)) return n;
-        }
-        return null;
-    }
-
     void forward(Message m) {
         NodeInfo next = findNextAlive();
         if (next == null) {
@@ -276,16 +246,6 @@ class Node {
             if (electionInProgress) return;
             electionInProgress = true;
         }
-
-        new Thread(() -> {
-            try { Thread.sleep(10000); } catch (InterruptedException e) {}
-            synchronized (Node.this) {
-                if (electionInProgress) {
-                    System.out.println(id + " election timeout (10s) → reset electionInProgress");
-                    electionInProgress = false;
-                }
-            }
-        }).start();
 
         // Check if we have quorum before running election
         if (!hasQuorum()) {
@@ -320,10 +280,6 @@ class Node {
     }
 
     void handleElection(Message m) {
-        synchronized (this) {
-            electionInProgress = true;
-        }
-
         if (m.initiator != null && m.initiator.equals(id) && m.electionId == myId) {
             synchronized (this) {
                 if (hasQuorum()) {  // Check quorum before creating token
@@ -347,7 +303,6 @@ class Node {
         NodeInfo next = findNextAlive();
         if (next == null) {
             System.out.println(id + " no next node, election halts");
-            synchronized (this) { electionInProgress = false; }
             return;
         }
         send(next, m);
@@ -420,6 +375,12 @@ class Node {
         
         ring.removeIf(n -> n.id.equals(leaving.id));
         lastSeen.remove(leaving.id);
+        
+        // If token was with leaving node, trigger election
+        if (!hasToken && System.currentTimeMillis() - lastTokenTime > 2000) {
+            System.out.println(id + " node " + leaving.id + " left while holding token → election");
+            startElection();
+        }
         
         broadcastRing();
     }

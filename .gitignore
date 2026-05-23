@@ -103,9 +103,3 @@ doc/**
 # Build & Config
 !pom.xml
 !nodes.config
-
-# ========== Exclusions for Local Tools ==========
-# Exclude the local runner script and fat jar
-run.sh
-TokenRing.jar
-/tmp/node*.log
