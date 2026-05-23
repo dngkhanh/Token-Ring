@@ -4,10 +4,10 @@
 # Sử dụng: ./run.sh [compile|jar|A|B|C|all|stop] [--delay ms]
 # ============================================================
 
-JAVA=/home/dngnguyen/Documents/oracleJdk-21/bin/java
-JAVAC=/home/dngnguyen/Documents/oracleJdk-21/bin/javac
-JAVA_HOME=/home/dngnguyen/Documents/oracleJdk-21
-GSON=/home/dngnguyen/.m2/repository/com/google/code/gson/gson/2.10.1/gson-2.10.1.jar
+JAVA=/File/oracleJdk-21/bin/java
+JAVAC=/File/oracleJdk-21/bin/javac
+JAVA_HOME=/File/oracleJdk-21
+GSON=/File/.m2/repository/com/google/code/gson/gson/2.10.1/gson-2.10.1.jar
 SRC_DIR=src/main/java
 OUT_DIR=out
 CP="$OUT_DIR:$GSON"
